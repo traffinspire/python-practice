@@ -10,15 +10,25 @@ def main():
     display_value = tk.StringVar(value="0")
     first_number = None
     selected_operation = None
+    result_shown = False
     display = tk.Entry(window, textvariable=display_value, font=("Arial", 24),
         justify="right", state="readonly"
     )
     display.pack(fill="x", padx=15, pady=15)
 
     def append_digit(digit):
+        nonlocal result_shown
+
         current_value = display_value.get()
-        if current_value == "0":
+
+        if (
+            current_value == "0" 
+            or current_value == "Выберите операцию"
+            or current_value.startswith("Ошибка:")
+            or result_shown
+        ):
             display_value.set(digit)
+            result_shown = False
         else:
             display_value.set(current_value + digit)
 
@@ -37,13 +47,18 @@ def main():
         display_value.set("0")
 
     def show_result():
-        nonlocal first_number, selected_operation
+        nonlocal first_number, selected_operation, result_shown
+
+        if first_number is None or selected_operation is None:
+            display_value.set("Выберите операцию")
+            return
 
         second_number = float(display_value.get())
 
         result = calculate(first_number, selected_operation, second_number)
 
         display_value.set(str(result))
+        result_shown = True
 
     button_frame = tk.Frame(window)
 
