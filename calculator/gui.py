@@ -1,4 +1,5 @@
 import tkinter as tk
+from calculator_logic import calculate
 
 def main():
     window = tk.Tk()
@@ -7,6 +8,8 @@ def main():
     window.resizable(False, False)
 
     display_value = tk.StringVar(value="0")
+    first_number = None
+    selected_operation = None
     display = tk.Entry(window, textvariable=display_value, font=("Arial", 24),
         justify="right", state="readonly"
     )
@@ -18,6 +21,29 @@ def main():
             display_value.set(digit)
         else:
             display_value.set(current_value + digit)
+
+    def clear_display():
+        nonlocal first_number, selected_operation
+
+        display_value.set("0")
+        first_number = None
+        selected_operation = None
+
+    def select_operation(operation):
+        nonlocal first_number, selected_operation
+
+        first_number = float(display_value.get())
+        selected_operation = operation
+        display_value.set("0")
+
+    def show_result():
+        nonlocal first_number, selected_operation
+
+        second_number = float(display_value.get())
+
+        result = calculate(first_number, selected_operation, second_number)
+
+        display_value.set(str(result))
 
     button_frame = tk.Frame(window)
 
@@ -106,9 +132,58 @@ def main():
         font=("Arial", 18),
         command=lambda: append_digit("0"),
     )
-    button_zero.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=3, pady=3)
+    button_zero.grid(row=3, column=0, sticky="nsew", padx=3, pady=3)
 
-    for column in range(3):
+    button_clear = tk.Button(
+        button_frame,
+        text="C",
+        font=("Arial", 18),
+        command=clear_display
+    )
+    button_clear.grid(row=3, column=1, sticky="nsew", padx=3, pady=3)
+
+    button_add = tk.Button(
+        button_frame,
+        text="+",
+        font=("Arial", 18),
+        command=lambda: select_operation("+")
+    )
+    button_add.grid(row=3, column=3, sticky="nsew", padx=3, pady=3)
+
+    button_subtract = tk.Button(
+        button_frame,
+        text="-",
+        font=("Arial", 18),
+        command=lambda: select_operation("-")
+    )
+    button_subtract.grid(row=2, column=3, sticky="nsew", padx=3, pady=3)
+
+    button_multiply = tk.Button(
+        button_frame,
+        text="*",
+        font=("Arial", 18),
+        command=lambda: select_operation("*")
+    )
+    button_multiply.grid(row=1, column=3, sticky="nsew", padx=3, pady=3)
+
+    button_divide = tk.Button(
+        button_frame,
+        text="/",
+        font=("Arial", 18),
+        command=lambda: select_operation("/")
+    )
+    button_divide.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
+
+    button_equals = tk.Button(
+        button_frame,
+        text="=",
+        font=("Arial", 18),
+        command=show_result
+    )
+    button_equals.grid(row=3, column=2, sticky="nsew", padx=3, pady=3)
+
+
+    for column in range(4):
         button_frame.columnconfigure(column, weight=1)
 
     for row in range(4):
