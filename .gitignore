@@ -4,3 +4,5 @@ __pycache__/
 *.py[cod]
 .env
 .vscode/
+
+currency_converter/rates_cache.json
