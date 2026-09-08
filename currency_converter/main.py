@@ -1,14 +1,120 @@
+import json
 import requests 
 from datetime import datetime, timezone
+from pathlib import Path
 
-# Получаем список валют, которые поддерживает API
-currencies_url="https://open.er-api.com/v6/latest/USD"
 
-currencies_response = requests.get(currencies_url)
-currencies_data = currencies_response.json()
+# Форматирование курса обмена
+def format_rate(value):
+    if 0 < abs(value) < 0.001:
+        decimals = 6
 
-# Берем только коды валют из ответа API и сортируем их по алфавиту
+    elif abs(value) < 1:
+        decimals = 4
+
+    else:
+        decimals = 2
+
+    return f"{value:,.{decimals}f}".replace(",", " ")
+
+
+# Форматирование денежных значений
+def format_amount(value):
+    if 0 < abs(value) < 0.01:
+        decimals = 6
+
+    elif abs(value) < 1:
+        decimals = 4
+
+    else:
+        decimals = 2
+
+    return f"{value:,.{decimals}f}".replace(",", " ")
+
+
+# Форматирование даты и времени в локальном часовом поясе компьютера
+def format_local_datetime(unix_timestamp):
+    return (
+        datetime.fromtimestamp(
+            unix_timestamp,
+            tz=timezone.utc,
+        )
+        .astimezone()
+        .strftime("%d.%m.%Y %H:%M UTC%z")
+    )
+
+
+# Путь к файлу кеша в папке приложения
+CACHE_FILE = Path(__file__).with_name("rates_cache.json")
+
+# Загружаем сохраненный кеш, если файл уже существует
+if CACHE_FILE.exists():
+    with open(CACHE_FILE, "r", encoding="utf-8") as file:
+        rates_cache = json.load(file)
+else:
+    rates_cache = {}
+
+
+# Получаем текущее время для проверки актуальности кеша
+current_time = datetime.now(timezone.utc).timestamp()
+
+# Здесь храним свежие данные для получения списка валют
+currencies_data = None
+
+# Ищем любую свежую запись в кеше
+for cached_currency, cached_data in rates_cache.items():
+    if (
+        cached_data.get("result") == "success"
+        and "rates" in cached_data
+        and current_time
+        < cached_data.get("time_next_update_unix", 0)
+    ):
+        currencies_data = cached_data
+
+        print(
+            f"Список валют загружен из кеша "
+            f"для {cached_currency}."
+        )
+        break
+
+# Если свежих данных в кеше нет, обращаемся к API
+if currencies_data is None:
+
+    # Если кеш уже содержит валюты, обновляем первую из них 
+    # Если кеш пустой, используем USD для первого запуска
+    bootstrap_currency = next(iter(rates_cache), "USD")
+
+    currencies_url = (
+        f"https://open.er-api.com/v6/latest/{bootstrap_currency}"
+    )
+
+    currencies_response = requests.get(currencies_url)
+    currencies_data = currencies_response.json()
+
+    # Сохраняем полученные данные в кеш
+    rates_cache[bootstrap_currency] = currencies_data
+
+    with open(CACHE_FILE, "w", encoding="utf-8") as file:
+        json.dump(
+            rates_cache, 
+            file, 
+            ensure_ascii=False, 
+            indent=4,
+        )
+
+    print(f"Список валют загружен из API для {bootstrap_currency}.")
+
+# Получаем и сортируем список кодов валют
 currencies = sorted(currencies_data["rates"].keys())
+
+
+# Показываем, до какого момента данные считаются актуальными
+cache_valid_until = format_local_datetime(
+    currencies_data["time_next_update_unix"]
+)
+
+print(f"Данные актуальны до: {cache_valid_until}")
+
 
 # Показываем пользователю доступные валюты
 print("Доступные валюты:")
@@ -52,11 +158,38 @@ while True:
 
         print("Выберите валюту из найденного списка.")
 
-    # Получаем актуальные курсы относительно выбранной исходной валюты
-    url = f"https://open.er-api.com/v6/latest/{from_currency}"
 
-    response = requests.get(url)
-    data = response.json()
+    # Получаем текущее время в формате Unix
+    current_time = datetime.now(timezone.utc).timestamp()
+
+    # Проверяем, есть ли валюта в кеше и не устарели ли данные
+    if (
+        from_currency in rates_cache
+        and current_time
+        < rates_cache[from_currency]["time_next_update_unix"]
+    ):
+        data = rates_cache[from_currency]
+        print(f"Курсы валют загружены из кеша для {from_currency}.")
+
+    # Получаем актуальные курсы относительно выбранной исходной валюты
+    else:
+        url = f"https://open.er-api.com/v6/latest/{from_currency}"
+
+        response = requests.get(url)
+        data = response.json()
+
+        rates_cache[from_currency] = data
+
+        # Сохраняем обновленный кеш на диск
+        with open(CACHE_FILE, "w", encoding="utf-8") as file:
+            json.dump(
+                rates_cache, 
+                file, 
+                ensure_ascii=False, 
+                indent=4,
+            )
+
+        print(f"Курсы валют загружены из API для {from_currency}.")
 
     # Проверяем, смог ли API обработать код исходной валюты
     if data["result"] == "error":
@@ -106,17 +239,16 @@ while True:
 
     # Преобразуем Unix-время обновления курса
     # в привычный формат день.месяц.год
-    update_date = datetime.fromtimestamp(
-        data["time_last_update_unix"],
-        tz=timezone.utc,
-    ).strftime("%d.%m.%Y")
+    update_date = format_local_datetime(
+        data["time_last_update_unix"]
+    )
 
     # Показываем пользователю курс и дату его обновления
     print(f"Актуальный курс обмена "
-        f"{from_currency} -> {to_currency}: {rate:.3f}"
+        f"{from_currency} -> {to_currency}: {format_rate(rate)}"
     )
 
-    print(f"Дата обновления курса: {update_date}")
+    print(f"Дата и время обновления курса: {update_date}")
 
     # Получаем сумму и проверяем корректность ввода
     while True:
@@ -142,8 +274,8 @@ while True:
     # Выводим итоговый результат
     print(
         f"Результат конвертации: "
-        f"{amount:.2f} {from_currency} = "
-        f"{result:.2f} {to_currency}"
+        f"{format_amount(amount)} {from_currency} = "
+        f"{format_amount(result)} {to_currency}"
     )
 
     # Спрашиваем, нужно ли выполнить еще одну конвертацию
