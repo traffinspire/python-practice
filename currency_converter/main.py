@@ -1,7 +1,14 @@
-import json
-import requests 
 from datetime import datetime, timezone
 from pathlib import Path
+from converter_logic import (
+    convert_amount,
+    get_supported_currencies,
+    find_currencies,
+    get_currencies_data,
+    get_currency_data,
+    get_rate,
+    load_cache,
+)
 
 
 # Форматирование курса обмена
@@ -47,65 +54,32 @@ def format_local_datetime(unix_timestamp):
 # Путь к файлу кеша в папке приложения
 CACHE_FILE = Path(__file__).with_name("rates_cache.json")
 
-# Загружаем сохраненный кеш, если файл уже существует
-if CACHE_FILE.exists():
-    with open(CACHE_FILE, "r", encoding="utf-8") as file:
-        rates_cache = json.load(file)
-else:
-    rates_cache = {}
+# Загружаем кеш курсов валют с диска
+rates_cache = load_cache(CACHE_FILE)
 
 
-# Получаем текущее время для проверки актуальности кеша
-current_time = datetime.now(timezone.utc).timestamp()
+# Получаем данные для списка доступных валют
+currencies_data, source, base_currency = get_currencies_data(
+    rates_cache,
+    CACHE_FILE,
+)
 
-# Здесь храним свежие данные для получения списка валют
-currencies_data = None
-
-# Ищем любую свежую запись в кеше
-for cached_currency, cached_data in rates_cache.items():
-    if (
-        cached_data.get("result") == "success"
-        and "rates" in cached_data
-        and current_time
-        < cached_data.get("time_next_update_unix", 0)
-    ):
-        currencies_data = cached_data
-
-        print(
-            f"Список валют загружен из кеша "
-            f"для {cached_currency}."
-        )
-        break
-
-# Если свежих данных в кеше нет, обращаемся к API
-if currencies_data is None:
-
-    # Если кеш уже содержит валюты, обновляем первую из них 
-    # Если кеш пустой, используем USD для первого запуска
-    bootstrap_currency = next(iter(rates_cache), "USD")
-
-    currencies_url = (
-        f"https://open.er-api.com/v6/latest/{bootstrap_currency}"
+# Показываем источник данных 
+if source == "cache":
+    print(
+        f"Список валют загружен из кеша "
+        f"для {base_currency}."
     )
 
-    currencies_response = requests.get(currencies_url)
-    currencies_data = currencies_response.json()
+else:
+    print(
+        f"Список валют загружен из API "
+        f"для {base_currency}."
+    )
 
-    # Сохраняем полученные данные в кеш
-    rates_cache[bootstrap_currency] = currencies_data
-
-    with open(CACHE_FILE, "w", encoding="utf-8") as file:
-        json.dump(
-            rates_cache, 
-            file, 
-            ensure_ascii=False, 
-            indent=4,
-        )
-
-    print(f"Список валют загружен из API для {bootstrap_currency}.")
 
 # Получаем и сортируем список кодов валют
-currencies = sorted(currencies_data["rates"].keys())
+currencies = get_supported_currencies(currencies_data)
 
 
 # Показываем, до какого момента данные считаются актуальными
@@ -130,11 +104,7 @@ while True:
         search = input("Поиск исходной валюты: ").strip().upper()
 
         # Ищем все валюты, в коде которых содержится введенный текст
-        matches = [
-            currency
-            for currency in currencies
-            if search in currency 
-        ]
+        matches = find_currencies(currencies, search)
 
         # Если совпадений нет, предлагаем выполнить поиск еще раз
         if not matches:
@@ -159,37 +129,26 @@ while True:
         print("Выберите валюту из найденного списка.")
 
 
-    # Получаем текущее время в формате Unix
-    current_time = datetime.now(timezone.utc).timestamp()
+    # Получаем курсы валют из кеша или API
+    data, source = get_currency_data(
+        from_currency,
+        rates_cache,
+        CACHE_FILE,
+    )
 
-    # Проверяем, есть ли валюта в кеше и не устарели ли данные
-    if (
-        from_currency in rates_cache
-        and current_time
-        < rates_cache[from_currency]["time_next_update_unix"]
-    ):
-        data = rates_cache[from_currency]
-        print(f"Курсы валют загружены из кеша для {from_currency}.")
+    # Показываем источник полученных данных
+    if source == "cache":
+        print(
+            f"Курсы валют загружены из кеша "
+            f"для {from_currency}."
+        )
 
-    # Получаем актуальные курсы относительно выбранной исходной валюты
     else:
-        url = f"https://open.er-api.com/v6/latest/{from_currency}"
+        print(
+            f"Курсы валют загружены из API "
+            f"для {from_currency}."
+        )
 
-        response = requests.get(url)
-        data = response.json()
-
-        rates_cache[from_currency] = data
-
-        # Сохраняем обновленный кеш на диск
-        with open(CACHE_FILE, "w", encoding="utf-8") as file:
-            json.dump(
-                rates_cache, 
-                file, 
-                ensure_ascii=False, 
-                indent=4,
-            )
-
-        print(f"Курсы валют загружены из API для {from_currency}.")
 
     # Проверяем, смог ли API обработать код исходной валюты
     if data["result"] == "error":
@@ -201,11 +160,7 @@ while True:
         search = input("Поиск целевой валюты: ").strip().upper()
 
         # Ищем совпадения среди валют, поддерживаемых API
-        matches = [
-            currency
-            for currency in currencies
-            if search in currency
-        ]
+        matches = find_currencies(currencies, search)
 
         # Если совпадений нет, повторяем поиск
         if not matches:
@@ -231,7 +186,7 @@ while True:
 
     # Получаем курс выбранной валютной пары
     try:
-        rate = data["rates"][to_currency]
+        rate = get_rate(data, to_currency)
 
     except KeyError:
         print("Ошибка: такой валюты не существует.")
@@ -268,8 +223,8 @@ while True:
         except ValueError:
             print("Ошибка: сумма должна быть числом. Попробуйте еще раз.")
 
-    # Выполняем конвертацию
-    result = amount * rate
+    # Выполняем конвертацию через обновленную логику converter_logic.py
+    result = convert_amount(amount, rate)
 
     # Выводим итоговый результат
     print(
