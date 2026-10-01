@@ -271,6 +271,13 @@ def main(page: ft.Page):
         from_code = from_currency.value
         to_code = to_currency.value
 
+        # Проверяем, что обе валюты выбраны
+        if not from_code or not to_code:
+            result_text.value = "Выберите исходную и целевую валюты."
+            rate_info_text.visible = False
+            page.update()
+            return
+
         # Проверяем введеную сумму
         try:
             amount = float(amount_field.value)
@@ -280,7 +287,7 @@ def main(page: ft.Page):
                 return
 
         except (ValueError, TypeError):
-            result_text.value = "Введите корректное число."
+            result_text.value = "Введите корректную сумму."
             return
 
         # Показываем пользователю, что идет получение данных
