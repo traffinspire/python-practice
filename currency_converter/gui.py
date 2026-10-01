@@ -27,6 +27,13 @@ def main(page: ft.Page):
     # Заголовок окна приложения
     page.title = "Currency Converter"
 
+    # настраиваем размер окна приложения
+    page.window.width = 520
+    page.window.height = 720
+
+    # Центрируем содиржимое страницы по горизонтали
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+
     # Загружаем сохраненный кеш курсов валют
     rates_cache = load_cache(CACHE_FILE)
 
@@ -44,6 +51,7 @@ def main(page: ft.Page):
         label="Из валюты",
         hint_text="Выберите валюту",
         value=None,
+        expand=True,
         options=[
             ft.DropdownOption(
                 key=currency,
@@ -71,6 +79,7 @@ def main(page: ft.Page):
         label="В валюту",
         hint_text="Выберите валюту",
         value=None,
+        expand=True,
         options=[
             ft.DropdownOption(
                 key=currency,
@@ -187,6 +196,7 @@ def main(page: ft.Page):
 
     # Поле для ввода суммы пользователем
     amount_field = ft.TextField(
+        width=400,
         label="Сумма",
 
         # Разрешаем вводить только цифры и одну десятичную точку
@@ -200,14 +210,33 @@ def main(page: ft.Page):
         keyboard_type=ft.KeyboardType.NUMBER,
     )
 
+
     # Текст, в котором позже будем показывать результат
     result_text = ft.Text(
-        "Здесь будет результат"
+        "Здесь будет результат",
+        size=14,
+        weight=ft.FontWeight.NORMAL,
     )
 
     # Информация об источнике и актуальности курса
     rate_info_text = ft.Text(
-        ""
+        "",
+        size=13,
+        visible=False,
+    )
+
+    # Карточка с результатом и информацией о курсе
+    result_card = ft.Container(
+        padding=16,
+        border_radius=12,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        content=ft.Column(
+            controls=[
+                result_text,
+                rate_info_text,
+            ],
+            spacing=8,
+        ),
     )
 
     # Индикатор загрузки данных из API
@@ -219,12 +248,14 @@ def main(page: ft.Page):
             ),
             ft.Text("Получаем актуальный курс..."),
         ],
+        alignment=ft.MainAxisAlignment.CENTER,
         visible=False,
     )
 
 
     # Кнопка запуска конвертации
     convert_button = ft.Button(
+        width=400,
         content="Конвертиовать",
     )
 
@@ -299,6 +330,8 @@ def main(page: ft.Page):
             f"{format_amount(result)} {to_code}\n"
             f"Курс: {format_rate(rate)}"
         )
+        result_text.size = 18
+        result_text.weight = ft.FontWeight.BOLD
 
         # Преобразуем техническое имя источника
         # в понятный текст для пользователя
@@ -314,6 +347,7 @@ def main(page: ft.Page):
             f"Обновлено: {update_at}\n"
             f"Актуально до: {valid_until}"
         )
+        rate_info_text.visible = True
 
         # Скрываем загрузку и снова разрешаем кнопку
         loading_row.visible = False
@@ -330,25 +364,49 @@ def main(page: ft.Page):
 
     # Добавляем элементы интерфейса на страницу
     page.add(
-        ft.Text("Конвертер валют"),
-        # Поиск и выбор исходной валюты в одной строке
-        ft.Row(
-            controls=[
-                from_search,
-                from_currency,
-            ]
-        ),
-        ft.Row(
-            controls=[
-                to_search,
-                to_currency,
-            ]
-        ),
-        amount_field,
-        convert_button,
-        loading_row,
-        result_text,
-        rate_info_text,
+        ft.Container(
+            width=440,
+            padding=20,
+            content=ft.Column(
+                controls=[
+                    # Заголовок приложения
+                    ft.Text(
+                        "Конвертер валют",
+                        size=28,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+
+                    # Поиск и выбор исходной валюты
+                    ft.Row(
+                        controls=[
+                            from_search,
+                            from_currency,
+                        ],
+                    ),
+
+                    # Поиск и выбор целевой валюты
+                    ft.Row(
+                        controls=[
+                            to_search,
+                            to_currency,
+                        ],
+                    ),
+
+                    # Поле ввода суммы
+                    amount_field,
+
+                    # Кнопка конвертации
+                    convert_button,
+
+                    # Индикатор загрузки
+                    loading_row,
+
+                    # Результат конвертации
+                    result_card,
+                ],
+                spacing=16,
+            ),
+        )
     )
 
 
